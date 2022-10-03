@@ -1,0 +1,62 @@
+# Phoebe C.R. Parrish
+## Berger Lab, FHCRC
+## 2022-10-03
+## updated 2022-10-03
+## snakemake v7.1.0
+
+import os
+import sys
+import re
+import pandas as pd
+
+## define config file
+configfile: "config/config.yaml"
+
+## read config folders into Snakemake variables
+pgRNA_counts_dir = config["base_dir"] + config["pgRNA_counts_dir"]
+pgRNA_counts_QC_dir = config["base_dir"] + config["pgRNA_counts_QC_dir"]
+
+## get file names from results/fastq_dir
+counts_file_list = []
+cell_line_list = []
+for file in os.scandir(pgRNA_counts_dir): ## file is a POSIX object, not a str
+    if file.is_file():
+        counts_file_list.append(file.path)
+        cell_line = file.name.split("_")[2]
+        cell_line_list.append(cell_line)
+print("counts_file_list =", counts_file_list)
+print("cell_line_list =", cell_line_list)
+
+
+## rule all is used to define output file names for the final rule & for other
+##   rules w/ no dependencies
+## also important for defining wildcards
+rule all:
+    input:
+        expand(pgRNA_counts_QC_dir + "{cell_line}_counts_QC.html",
+            cell_line = cell_line_list)
+        # gRNA_counts_dir + config["base_sample_name"] + ".count.txt"
+
+
+## run Rmd: https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html
+rule pgRNA_counts_QC:
+    input:
+        pgRNA_counts_dir + config["base_sample_name"] + "{cell_line}_counts.txt"
+    output:
+        expand(pgRNA_counts_QC_dir + config["base_sample_name"] + "{cell_line}_counts_QC.html",
+            cell_line = cell_line_list)
+    params:
+        script = "workflow/scripts/gRNA_counts_QC.Rmd",
+        out_dir = gRNA_counts_QC_dir
+    script:
+        """
+        mkdir -p {params.out_dir}
+
+        R -e "rmarkdown::render(
+            input = {params.script},
+            params = list(
+                counts_file = {input},
+                output_dir = {params.out_dir}
+            )
+        )"
+        """

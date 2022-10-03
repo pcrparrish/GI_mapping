@@ -1,0 +1,14 @@
+## variables
+## - base_sample_name = yourInitials_yourLibrary, e.g. PP_pgPEN
+##    additional values will be: cellLine_timePoint_replicate...
+base_sample_name: PP_pgPEN
+# samples: PD0_1,PD0_3,Con_1,Con_3,Enza_1,Enza_3
+
+## file paths
+base_dir: /fh/fast/berger_a/grp/bergerlab_shared/Projects/paralog_pgRNA/pgPEN_library/GI_mapping
+pgRNA_counts_dir: results/pgRNA_counts/
+pgRNA_counts_QC_dir: results/pgRNA_counts_QC/
+ref_dir: ref/
+
+## file names
+# library_file: ...txt

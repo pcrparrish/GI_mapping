@@ -1,0 +1,16 @@
+## gitignore documentation: https://www.atlassian.com/git/tutorials/saving-changes/gitignore
+
+## ignore the following:
+**/logs
+*.pdf
+*.svg
+.*
+*version*
+*build*
+config/*
+results/
+workflow/report/
+
+## don't ignore the following
+!.gitignore
+!config/*.sample.*
