@@ -43,12 +43,14 @@ rule pgRNA_counts_QC:
     input:
         pgRNA_counts_dir + config["base_sample_name"] + "{cell_line}_counts.txt"
     output:
-        expand(pgRNA_counts_QC_dir + config["base_sample_name"] + "{cell_line}_counts_QC.html",
-            cell_line = cell_line_list)
+        ## convert to a report param, change output to TXT file
+        pgRNA_counts_QC_dir + config["base_sample_name"] + "{cell_line}_counts_QC.html"
+    conda:
+        "envs/pgRNA_counts_QC.yaml"
     params:
-        script = "workflow/scripts/gRNA_counts_QC.Rmd",
+        script = "workflow/scripts/pgRNA_counts_QC.Rmd",
         out_dir = gRNA_counts_QC_dir
-    script:
+    shell:
         """
         mkdir -p {params.out_dir}
 
