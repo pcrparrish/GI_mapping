@@ -10,6 +10,7 @@
 config/*
 results/
 workflow/report/
+workflow/old_scripts/
 
 ## don't ignore the following
 !.gitignore

@@ -1,9 +1,8 @@
 ---
-title: "CRISPR pipeline: gRNA counts QC"
+title: "GI mapping pipeline: pgRNA counts QC"
 author: "Phoebe Parrish"
 date: "`r Sys.Date()`"
 output: html_document
-
 ---
 
 ## Rmd knit notes
@@ -12,11 +11,9 @@ https://stackoverflow.com/questions/31463143/pass-parameters-from-command-line-i
 
 
 ## To Do
-* add a step to define ordering of samples => convert sample variable into factor
 * convert sample list to factor - make sure there is a consistent naming scheme in the barcode ref file, then use that somehow? Sort it alphabetically?
-* replace plasmid with Day00 wherever necessary
 * write a function to summarize n and percent of TRUE values, return n(TRUE)
-* use kable to print tibbles?
+* allow user to input cutoff used to filter reads
 
 
 ## Setup
@@ -33,6 +30,10 @@ https://stackoverflow.com/questions/31463143/pass-parameters-from-command-line-i
 #       encoding = encoding, 
 #       output_dir = "`r params$output_dir`")
 #   })
+# knit: function(inputFile, encoding){
+#   rmarkdown::render(inputFile, 
+#     encoding = encoding, 
+#     output_dir = "../results/pgRNA_counts_QC")}
 
 ```
 
@@ -48,11 +49,11 @@ knitr::opts_chunk$set(
 ### Load packages
 ```{r setup, results = FALSE, message = FALSE, warning = FALSE}
 
-library(tidylog)
 library(tidyverse)
+library(tidylog)
 library(pheatmap) # for making correlation heatmap
 library(RColorBrewer) # for heatmap colors
-library(raster) # for calculating %CV
+# library(raster) # for calculating %CV
 library(kableExtra) # for formatting kables
 
 ```
@@ -65,7 +66,15 @@ library(kableExtra) # for formatting kables
 ## file paths
 # base_dir <- file.path("/Volumes", "fh", "fast")
 
-in_dir <- file.path("/Volumes", "Projects", "paralog_pgRNA", "pgPEN_library", "GI_mapping")
+base_dir <- file.path("/Volumes", "Projects", "paralog_pgRNA", "pgPEN_library", "GI_mapping")
+# base_dir <- file.path("/fh", "fast", "berger_a", "grp", "bergerlab_shared", "Projects",
+#                       "paralog_pgRNA", "pgPEN_library", "GI_mapping")
+# base_dir <- params$base_dir
+
+in_dir <- file.path(base_dir, "results", "pgRNA_counts")
+
+out_dir <- file.path(base_dir, "results", "pgRNA_counts_QC")
+# out_dir <- file.path("results", "pgRNA_counts_QC")
 
 # PP_dir <- file.path("/Volumes", "Projects", "paralog_pgRNA", "pgPEN_library", 
 #                     "190522_plasmid", "pgRNA_counts")
@@ -80,6 +89,10 @@ plot_theme <- theme(axis.text = element_text(colour="black"),
 
 plot_options <- list(theme_bw(base_size = 12))
 
+## set default aspect ratios
+wide_ar <- 0.75
+square_ar <- 1
+
 ```
 
 ### Save functions
@@ -89,7 +102,30 @@ print_kbl <- function(tbl) {
   kbl(tbl) %>%
     kable_styling(full_width = FALSE, 
                   position = "left",
-                  bootstrap_options = c("striped", "hover"))
+                  bootstrap_options = c("striped", "hover", "responsive"))
+}
+
+```
+
+```{r}
+
+save_tbl <- function(tbl){
+  tbl_str <- deparse(substitute(tbl))
+  write_tsv(tbl, file.path(out_dir, "tables", "tsv", paste0(tbl_str, ".txt")))
+  write_rds(tbl, file.path(out_dir, "tables", "rds", tbl_str))
+}
+
+```
+
+
+```{r}
+
+save_plot <- function(plt){
+  plt_str <- deparse(substitute(plt))
+  ggsave(plot = plt, 
+         filename = file.path(out_dir, "plots", "pdf", paste0(plt_str, ".pdf")))
+  ggsave(plot = plt, 
+         filename = file.path(out_dir, "plots", "png", paste0(plt_str, ".png")))
 }
 
 ```
@@ -100,7 +136,7 @@ print_kbl <- function(tbl) {
 #### d.counts
 ```{r, results = FALSE, message = FALSE, warning = FALSE}
 
-d.counts <- read_tsv(file.path(in_dir, "results", "pgRNA_counts", "PP_pgPEN_HeLa_counts.txt"), col_names=TRUE)
+d.counts <- read_tsv(file.path(in_dir, "PP_pgPEN_HeLa_counts.txt"), col_names=TRUE)
 #d.counts
 
 # d.plasmid_counts <- read_tsv(file.path(PP_dir, "paralog_library_all.plasmid.counts.txt"))
@@ -138,7 +174,8 @@ d.counts_long <- d.counts %>%
 ## how many reads are in each sample?
 d.summ <- d.counts_long %>%
   group_by(sample) %>%
-  summarize(sum = sum(count))
+  summarize(sum = sum(count), 
+            coverage = round((sum / 31700), 2))
 print_kbl(d.summ)
 
 ## convert sample to a factor 
@@ -156,14 +193,16 @@ d.counts_cdf <- d.counts_long %>%
   group_by(sample) %>%
   mutate(count_norm = -log10((count+1)/sum(count)))
 
-ggplot(d.counts_cdf, aes(x = count_norm, color = sample)) +
+pgRNA_counts_cdf <- ggplot(d.counts_cdf, aes(x = count_norm, color = sample)) +
   stat_ecdf() +
   labs(x = "-log10(count/total_count)", # bquote(~-log[10]~"(count/total_count)")
        y = "Expected_pgRNAs",
        color = "Sample") +  
   plot_options +
   plot_theme +
-  theme(aspect.ratio = 0.75)
+  theme(aspect.ratio = wide_ar)
+pgRNA_counts_cdf
+save_plot(pgRNA_counts_cdf)
 
 ```
 
@@ -180,13 +219,15 @@ n_samples <- d.counts_long %>%
   distinct(sample) %>%
   nrow()
 
-ggplot(d.counts_cpm, aes(x = log2_cpm, fill = sample)) +
+sample_cpm_histogram <- ggplot(d.counts_cpm, aes(x = log2_cpm, fill = sample)) +
   geom_histogram(color = "black", binwidth = 0.5) +
   plot_options +
   plot_theme +
-  theme(aspect.ratio = 0.75,
+  theme(aspect.ratio = wide_ar,
         legend.position = "none") +
   facet_wrap(~sample, scales = "free_y", ncol = ceiling(n_samples/2))
+sample_cpm_histogram
+save_plot(sample_cpm_histogram)
 
 ```
 
@@ -206,7 +247,7 @@ d.counts_cpm_cor <- d.counts_cpm %>%
 
 colors <- colorRampPalette(brewer.pal(n = 9, name ="YlGnBu"))(50)
 
-cor_heatmap_unfiltered <- pheatmap(d.counts_cpm_cor,
+sample_cor_heatmap_unfiltered <- pheatmap(d.counts_cpm_cor,
                  col = colors,
                  border_color = "white",
                  cellwidth = 20, cellheight = 20,
@@ -217,12 +258,21 @@ cor_heatmap_unfiltered <- pheatmap(d.counts_cpm_cor,
                  cex = 1, clustering_distince_rows = "euclidean",
                  cex = 1, clustering_distance_cols = "euclidean",
                  cluster_method = "complete")
+sample_cor_heatmap_unfiltered
+
+png(file.path(out_dir, "plots", "png", "sample_correlation_heatmap_unfiltered.png"), 
+    units = "in", res = 300, 
+    width = 4.51, height = 4.51)
+pdf(file.path(out_dir, "plots", "pdf", "sample_correlation_heatmap_unfiltered.pdf"), 
+    width = 4.51, height = 4.51)
+sample_cor_heatmap_unfiltered
+dev.off()
 
 ```
 
 
 
-### Filter out low counts
+### Flag low counts
 
 ```{r}
 
@@ -248,30 +298,30 @@ print_kbl(d.summ)
 
 ```{r}
 
-## filter out pgRNAs with low plasmid read counts
+## flag pgRNAs with low plasmid read counts
 
 ## filter pgRNA df for plasmid reads only
 d.counts_cpm_plasmid <- d.counts_cpm %>%
   filter(sample == "Day00_RepA")  ## change to Day00 once I figure out a good naming scheme
 
 ## what does the plasmid read count distribution look like? 
-plot.plasmid_cpm <-  ggplot(d.counts_cpm_plasmid, aes(x = log2_cpm)) +
+plasmid_cpm_histogram <-  ggplot(d.counts_cpm_plasmid, aes(x = log2_cpm)) +
   geom_histogram(binwidth = 0.2,
                  color = "black", 
                  fill = "gray60") +
   plot_options +
   plot_theme +
-  theme(aspect.ratio = 0.75)
-plot.plasmid_cpm
+  theme(aspect.ratio = wide_ar)
+plasmid_cpm_histogram
+save_plot(plasmid_cpm_histogram)
 
 ## determine plasmid cutoff
-d.counts_cpm_plasmid
 d.counts_cpm_plasmid_stats <- d.counts_cpm_plasmid %>%
   summarize(median = median(log2_cpm),
             Q1 = quantile(log2_cpm, probs = 0.25),
             Q3 = quantile(log2_cpm, probs = 0.75),
             lower_outlier = (Q1 - 1.5*(Q3 - Q1)))
-d.counts_cpm_plasmid_stats %>% kbl %>% kable_styling(full_width = FALSE, position = "left")
+print_kbl(d.counts_cpm_plasmid_stats)
 
 ## save your selected cutoff as a variable
 plasmid_cpm_cutoff <- d.counts_cpm_plasmid_stats %>%
@@ -285,9 +335,11 @@ plasmid_cpm_cutoff <- d.counts_cpm_plasmid_stats %>%
 ```{r}
 
 ## add your cutoff line to the plasmid plot
-plot.plasmid_cpm + 
+plasmid_cpm_histogram_cutoff <- plasmid_cpm_histogram + 
   geom_vline(xintercept = plasmid_cpm_cutoff, ## adjust based on selected cutoff
              linetype = "dashed") 
+plasmid_cpm_histogram_cutoff
+save_plot(plasmid_cpm_histogram_cutoff)
 
 ## add filter variable to pgRNA df based on selected cutoff
 d.counts_cpm_plasmid_filter <- d.counts_cpm_plasmid %>%
@@ -362,12 +414,15 @@ print_kbl(d.summ_complete)
 ## Write output
 ```{r}
 
-## add counts back in, filter out pgRNAs, write output
-d.counts_cpm_filtered <- d.counts_cpm_filter %>%
-  filter(rm_pgRNA == FALSE)
-d.counts_cpm_filtered
+## add counts back into flagged df, write output
+d.counts_cpm_flag_long <- left_join(d.counts_cpm, d.counts_cpm_filter, by = "id")
+save_tbl(d.counts_cpm_flag_long)
 
-## also save relevant plots
+d.counts_cpm_flag_wide <- d.counts_cpm_flag_long %>%
+  pivot_wider(names_from = sample, 
+              values_from = count:log2_cpm,
+              names_glue = "{sample}_{.value}")
+save_tbl(d.counts_cpm_flag_wide)
 
 ```
 

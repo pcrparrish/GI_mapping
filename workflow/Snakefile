@@ -12,16 +12,18 @@ import pandas as pd
 ## define config file
 configfile: "config/config.yaml"
 
-## read config folders into Snakemake variables
+## read config folders into Python variables
 pgRNA_counts_dir = config["base_dir"] + config["pgRNA_counts_dir"]
 pgRNA_counts_QC_dir = config["base_dir"] + config["pgRNA_counts_QC_dir"]
 
-## get file names from results/fastq_dir
+## get file names from results/pgRNA_counts_dir
 counts_file_list = []
 cell_line_list = []
 for file in os.scandir(pgRNA_counts_dir): ## file is a POSIX object, not a str
-    if file.is_file():
+    if file.is_file() and not file.name.startswith('.'):
         counts_file_list.append(file.path)
+        print(file.path)
+        print(file.name)
         cell_line = file.name.split("_")[2]
         cell_line_list.append(cell_line)
 print("counts_file_list =", counts_file_list)
@@ -33,7 +35,7 @@ print("cell_line_list =", cell_line_list)
 ## also important for defining wildcards
 rule all:
     input:
-        expand(pgRNA_counts_QC_dir + "{cell_line}_counts_QC.html",
+        expand(pgRNA_counts_QC_dir + config["base_sample_name"] + "_{cell_line}_counts_QC.html",
             cell_line = cell_line_list)
         # gRNA_counts_dir + config["base_sample_name"] + ".count.txt"
 
@@ -41,24 +43,28 @@ rule all:
 ## run Rmd: https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html
 rule pgRNA_counts_QC:
     input:
-        pgRNA_counts_dir + config["base_sample_name"] + "{cell_line}_counts.txt"
+        pgRNA_counts_dir + config["base_sample_name"] + "_{cell_line}_counts.txt"
     output:
         ## convert to a report param, change output to TXT file
-        pgRNA_counts_QC_dir + config["base_sample_name"] + "{cell_line}_counts_QC.html"
+        pgRNA_counts_QC_dir + config["base_sample_name"] + "_{cell_line}_counts_QC.html"
     conda:
         "envs/pgRNA_counts_QC.yaml"
     params:
         script = "workflow/scripts/pgRNA_counts_QC.Rmd",
-        out_dir = gRNA_counts_QC_dir
+        out_dir = "results/pgRNA_counts_QC"
+    log:
+        "workflow/logs/pgRNA_counts_QC/{cell_line}.log"
     shell:
         """
         mkdir -p {params.out_dir}
+        mkdir -p "workflow/logs/pgRNA_counts_QC/"
 
-        R -e "rmarkdown::render(
-            input = {params.script},
-            params = list(
-                counts_file = {input},
-                output_dir = {params.out_dir}
-            )
-        )"
+        Rscript -e \"rmarkdown::render(
+            input = '{params.script}'
+            # input = {params.script},
+            # params = list(
+            #     counts_file = {input},
+            #     output_dir = {params.out_dir}
+            # )
+        )\" &> {log}
         """

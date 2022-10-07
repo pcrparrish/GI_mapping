@@ -1,0 +1,206 @@
+---
+title: "GI mapping pipeline: filter counts and calculate LFC"
+author: "Phoebe Parrish"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Rmd knit notes
+https://stackoverflow.com/questions/32479130/passing-parameters-to-r-markdown
+https://stackoverflow.com/questions/31463143/pass-parameters-from-command-line-into-r-markdown-document
+
+
+## To Do
+* 
+
+
+## Setup
+```{r, include = FALSE, eval = FALSE}
+
+## possible params for future use: 
+# params: 
+#   counts_file: 
+#     value: x
+#   output_dir: 
+#     value: x
+# knit: (function(inputFile, encoding) {
+#     rmarkdown::render(inputFile, 
+#       encoding = encoding, 
+#       output_dir = "`r params$output_dir`")
+#   })
+# knit: function(inputFile, encoding){
+#   rmarkdown::render(inputFile, 
+#     encoding = encoding, 
+#     output_dir = "../results/pgRNA_counts_QC")}
+
+```
+
+
+```{r, include = FALSE}
+
+knitr::opts_chunk$set(
+  results = "hold"
+)
+
+```
+
+### Load packages
+```{r setup, results = FALSE, message = FALSE, warning = FALSE}
+
+library(tidyverse)
+library(tidylog)
+# library(pheatmap) # for making correlation heatmap
+library(RColorBrewer) # for heatmap colors
+# library(raster) # for calculating %CV
+library(kableExtra) # for formatting kables
+
+```
+
+### Save variables
+```{r}
+
+## convert to Snakemake input later
+
+## file paths
+# base_dir <- file.path("/Volumes", "fh", "fast")
+
+base_dir <- file.path("/Volumes", "Projects", "paralog_pgRNA", "pgPEN_library", "GI_mapping")
+# base_dir <- file.path("/fh", "fast", "berger_a", "grp", "bergerlab_shared", "Projects",
+#                       "paralog_pgRNA", "pgPEN_library", "GI_mapping")
+# base_dir <- params$base_dir
+
+in_dir <- file.path(base_dir, "results", "pgRNA_counts_QC")
+
+out_dir <- file.path(base_dir, "results", "filter_and_calc_LFC")
+# out_dir <- file.path("results", "pgRNA_counts_QC")
+
+# PP_dir <- file.path("/Volumes", "Projects", "paralog_pgRNA", "pgPEN_library", 
+#                     "190522_plasmid", "pgRNA_counts")
+
+# out_dir
+
+## ggplot themes
+## see: https://www.rdocumentation.org/packages/ggplot2/versions/2.1.0/topics/theme_update
+## and https://stackoverflow.com/questions/23173915/can-ggplot-theme-formatting-be-saved-as-an-object
+plot_theme <- theme(axis.text = element_text(colour="black"),
+                  axis.ticks = element_line(color="black"))
+
+plot_options <- list(theme_bw(base_size = 12))
+
+## set default aspect ratios
+wide_ar <- 0.75
+square_ar <- 1
+
+```
+
+### Save functions
+```{r}
+
+print_kbl <- function(tbl) {
+  kbl(tbl) %>%
+    kable_styling(full_width = FALSE, 
+                  position = "left",
+                  bootstrap_options = c("striped", "hover", "responsive"))
+}
+
+```
+
+```{r}
+
+save_tbl <- function(tbl){
+  tbl_str <- deparse(substitute(tbl))
+  write_tsv(tbl, file.path(out_dir, "tables", "tsv", paste0(tbl_str, ".txt")))
+  write_rds(tbl, file.path(out_dir, "tables", "rds", tbl_str))
+}
+
+```
+
+
+```{r}
+
+save_plot <- function(plt){
+  plt_str <- deparse(substitute(plt))
+  ggsave(plot = plt, 
+         filename = file.path(out_dir, "plots", "pdf", paste0(plt_str, ".pdf")))
+  ggsave(plot = plt, 
+         filename = file.path(out_dir, "plots", "png", paste0(plt_str, ".png")))
+}
+
+```
+
+
+### Read in files
+
+#### d.counts
+```{r, results = FALSE, message = FALSE, warning = FALSE}
+
+d.counts_flagged <- read_rds(file.path(in_dir,"tables", "rds", "d.counts_cpm_flag_long"))
+#d.counts
+
+# d.plasmid_counts <- read_tsv(file.path(PP_dir, "paralog_library_all.plasmid.counts.txt"))
+
+```
+
+#### pgRNA annotations file
+```{r}
+
+# d.annot <- read_tsv(file.path(in.filepath, "paralog_pgRNA_annotations.txt"))
+#d.annot
+
+```
+
+
+## Calculate LFC
+
+### Reformat d.counts
+```{r}
+
+## calculate LFC
+d.counts_flagged_timepoint <- d.counts_flagged %>%
+  separate(sample, into = c("day", "rep"), sep = "_", remove = FALSE) %>%
+  mutate(day = readr::parse_number(day)) %>%
+  group_by(id) %>%
+  mutate(timepoint = case_when(
+    day == min(day) ~ "plasmid",
+    day == max(day) ~ "late",
+    TRUE ~ "early")) 
+
+```
+
+
+```{r}
+
+## early timepoints
+## this will have to be changed if there are multiple early TP reps
+d.counts_flagged_timepoint_early <- d.counts_flagged_timepoint %>%
+  filter(timepoint == "plasmid" | timepoint == "early") %>%
+  dplyr::select(id, timepoint, log2_cpm) %>%
+  pivot_wider(names_from = timepoint, 
+              values_from = log2_cpm,
+              names_glue = "{timepoint}_{.value}")
+d.counts_flagged_timepoint_early
+
+## calculate LFC for plasmid vs. late and early vs. late
+d.counts_flagged_timepoint_lfc <- d.counts_flagged_timepoint %>%
+  filter(timepoint == "late") %>% ## filter for only late timepoints
+  left_join(d.counts_flagged_timepoint_early, by = "id") %>%
+  mutate(lfc_plasmid_vs_late = log2_cpm - plasmid_log2_cpm,
+         lfc_early_vs_late = log2_cpm - early_log2_cpm)
+d.counts_flagged_timepoint_lfc
+
+```
+
+```{r}
+
+## clean up table
+## add annotations
+## get target-level values
+## look at rep correlations
+## look at SSMD
+
+```
+
+
+
+
+
