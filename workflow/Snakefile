@@ -35,7 +35,9 @@ print("cell_line_list =", cell_line_list)
 ## also important for defining wildcards
 rule all:
     input:
-        expand(pgRNA_counts_QC_dir + config["base_sample_name"] + "_{cell_line}_counts_QC.html",
+        # expand(pgRNA_counts_QC_dir + config["base_sample_name"] + "_{cell_line}_counts_QC.html",
+        #     cell_line = cell_line_list)
+        expand("results/calculate_LFC/tables/rds/{cell_line}_GI_scores_target.txt",
             cell_line = cell_line_list)
         # gRNA_counts_dir + config["base_sample_name"] + ".count.txt"
 
@@ -45,13 +47,16 @@ rule pgRNA_counts_QC:
     input:
         pgRNA_counts_dir + config["base_sample_name"] + "_{cell_line}_counts.txt"
     output:
-        ## convert to a report param, change output to TXT file
-        pgRNA_counts_QC_dir + config["base_sample_name"] + "_{cell_line}_counts_QC.html"
+        ## convert to a report param, change output to TXT file?
+        "results/pgRNA_counts_QC/tables/rds/d.{cell_line}_counts_cpm_flag_long"
     conda:
         "envs/pgRNA_counts_QC.yaml"
     params:
         script = "workflow/scripts/pgRNA_counts_QC.Rmd",
-        out_dir = "results/pgRNA_counts_QC"
+        base_dir = config["base_dir"],
+        out_dir = pgRNA_counts_QC_dir,
+        out_dir_for_R = "results/pgRNA_counts_QC",
+        report = config["base_sample_name"] + "_{cell_line}_counts_QC.html"
     log:
         "workflow/logs/pgRNA_counts_QC/{cell_line}.log"
     shell:
@@ -59,12 +64,96 @@ rule pgRNA_counts_QC:
         mkdir -p {params.out_dir}
         mkdir -p "workflow/logs/pgRNA_counts_QC/"
 
-        Rscript -e \"rmarkdown::render(
-            input = '{params.script}'
-            # input = {params.script},
-            # params = list(
-            #     counts_file = {input},
-            #     output_dir = {params.out_dir}
-            # )
-        )\" &> {log}
+        ## note: single quotes must be used so R doesn't interpret special chars
+        Rscript -e "rmarkdown::render('{params.script}',
+            params = list(
+                cell_line = '{cell_line}',
+                base_dir = '{params.base_dir}'),
+            output_dir = '{params.out_dir_for_R}',
+            output_file = '{params.report}')" &> {log}
+        """
+
+rule get_pgRNA_annotations:
+    input:
+        pgRNA_counts_dir + config["base_sample_name"] + "_{cell_line}_counts.txt"
+    output:
+        "results/get_pgRNA_annotations/tables/rds/d.{cell_line}_annot"
+    conda:
+        "envs/get_pgRNA_annotations.yaml"
+    params:
+        script = "workflow/scripts/get_pgRNA_annotations.Rmd",
+        base_dir = config["base_dir"],
+        out_dir = "results/get_pgRNA_annotations",
+        report = config["base_sample_name"] + "_{cell_line}_counts_QC.html"
+    log:
+        "workflow/logs/pgRNA_counts_QC/{cell_line}.log"
+    shell:
+        """
+        mkdir -p {params.out_dir}
+        mkdir -p "workflow/logs/pgRNA_counts_QC/"
+
+        ## note: single quotes must be used so R doesn't interpret special chars
+        Rscript -e "rmarkdown::render('{params.script}',
+            params = list(
+                cell_line = '{cell_line}',
+                base_dir = '{params.base_dir}'),
+            output_dir = '{params.out_dir}',
+            output_file = '{params.report}')" &> {log}
+        """
+
+rule calculate_LFC:
+    input:
+        counts = "results/pgRNA_counts_QC/tables/rds/d.{cell_line}_counts_cpm_flag_long",
+        annot = "results/get_pgRNA_annotations/tables/rds/d.{cell_line}_annot"
+    output:
+        "results/calculate_LFC/tables/rds/d.{cell_line}_lfc_annot_adj_pgRNA"
+    conda:
+        "envs/LFC_and_GI_calcs.yaml"
+    params:
+        script = "workflow/scripts/filter_and_calculate_LFC.Rmd",
+        base_dir = config["base_dir"],
+        out_dir = "results/calculate_LFC",
+        report = config["base_sample_name"] + "_{cell_line}_filter_and_calculate_LFC.html"
+    log:
+        "workflow/logs/calculate_LFC/{cell_line}.log"
+    shell:
+        """
+        mkdir -p {params.out_dir}
+        mkdir -p "workflow/logs/calculate_LFC/"
+
+        ## note: single quotes must be used so R doesn't interpret special chars
+        Rscript -e "rmarkdown::render('{params.script}',
+            params = list(
+                cell_line = '{cell_line}',
+                base_dir = '{params.base_dir}'),
+            output_dir = '{params.out_dir}',
+            output_file = '{params.report}')" &> {log}
+        """
+
+rule calculate_GI_scores:
+    input:
+        "results/calculate_LFC/tables/rds/d.{cell_line}_lfc_annot_adj_pgRNA"
+    output:
+        "results/calculate_LFC/tables/rds/{cell_line}_GI_scores_target.txt"
+    conda:
+        "envs/LFC_and_GI_calcs.yaml"
+    params:
+        script = "workflow/scripts/calculate_GI_scores.Rmd",
+        base_dir = config["base_dir"],
+        out_dir = "results/calculate_GI_scores",
+        report = config["base_sample_name"] + "_{cell_line}_calculate_GI_scores.html"
+    log:
+        "workflow/logs/calculate_GI_scores/{cell_line}.log"
+    shell:
+        """
+        mkdir -p {params.out_dir}
+        mkdir -p "workflow/logs/calculate_GI_scores/"
+
+        ## note: single quotes must be used so R doesn't interpret special chars
+        Rscript -e "rmarkdown::render('{params.script}',
+            params = list(
+                cell_line = '{cell_line}',
+                base_dir = '{params.base_dir}'),
+            output_dir = '{params.out_dir}',
+            output_file = '{params.report}')" &> {log}
         """

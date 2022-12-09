@@ -4,6 +4,7 @@
 **/logs
 *.pdf
 *.svg
+*.html
 .*
 *version*
 *build*
@@ -11,6 +12,11 @@ config/*
 results/
 workflow/report/
 workflow/old_scripts/
+workflow/scripts/preprocess_annotations.Rmd
+workflow/scripts/old_GI_summary.Rmd
+workflow/scripts/compare_GI_scores.Rmd
+render_rmd.sh
+workflow/scripts/test.Rmd
 
 ## don't ignore the following
 !.gitignore

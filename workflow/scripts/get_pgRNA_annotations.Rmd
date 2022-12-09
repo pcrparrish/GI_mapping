@@ -1,8 +1,14 @@
 ---
-title: "GI mapping pipeline: filter counts and calculate LFC"
+title: "GI mapping pipeline: get pgRNA annotations"
 author: "Phoebe Parrish"
-date: "`r Sys.Date()`"
+date: "`r format(Sys.time(), '%m/%d/%y %I:%M %p')`"
 output: html_document
+params: 
+  cell_line: "HeLa"
+  base_dir: "/Volumes/Projects/paralog_pgRNA/pgPEN_library/GI_mapping"
+  pgRNA_library: "pgPEN"
+  rnaseq_source: "user"
+  cn_source: "depmap"
 ---
 
 ## Rmd knit notes
@@ -11,7 +17,20 @@ https://stackoverflow.com/questions/31463143/pass-parameters-from-command-line-i
 
 
 ## To Do
-* 
+* fix select calls after adding target_type to original DF and renaming pgRNA_id
+* update params options to be pgPEN and other
+* fix reading in files to make a function^
+* split up so that the new reference files are used - .gitignore code that is not necessary & keep for reference
+* figure out what to do if there are multiple hits for your cell line name in DepMap
+* figure out how to control the version of DepMap that is used for the analysis (get user input??)
+* remove pgPEN from variable names (change to just lib?)
+* return or just print the DepMap IDs...and then I guess I can check the log file or something? 
+* add option to input your own RNAseq or CN data (include documentation on format)
+* add param to specify which ID to join by? 
+* compare new annotations to "old" to make sure everything looks right
+* figure out how to dynamically do the fake_gene_num seq if they are not using pgPEN
+* add pgRNA_target for all pgRNAs
+* reorganize columns & write output files
 
 
 ## Setup
@@ -49,157 +68,457 @@ knitr::opts_chunk$set(
 
 library(tidyverse)
 library(tidylog)
-# library(pheatmap) # for making correlation heatmap
-library(RColorBrewer) # for heatmap colors
-# library(raster) # for calculating %CV
+library(biomaRt)
+library("depmap") # for CN data
+library("ExperimentHub") 
 library(kableExtra) # for formatting kables
 
 ```
 
-### Save variables
+### Save variables and functions
+
 ```{r}
 
-## convert to Snakemake input later
-
-## file paths
-# base_dir <- file.path("/Volumes", "fh", "fast")
-
-base_dir <- file.path("/Volumes", "Projects", "paralog_pgRNA", "pgPEN_library", "GI_mapping")
-# base_dir <- file.path("/fh", "fast", "berger_a", "grp", "bergerlab_shared", "Projects",
-#                       "paralog_pgRNA", "pgPEN_library", "GI_mapping")
-# base_dir <- params$base_dir
-
-in_dir <- file.path(base_dir, "results", "pgRNA_counts_QC")
-
-out_dir <- file.path(base_dir, "results", "filter_and_calc_LFC")
-# out_dir <- file.path("results", "pgRNA_counts_QC")
-
-# PP_dir <- file.path("/Volumes", "Projects", "paralog_pgRNA", "pgPEN_library", 
-#                     "190522_plasmid", "pgRNA_counts")
-
-# out_dir
-
-## ggplot themes
-## see: https://www.rdocumentation.org/packages/ggplot2/versions/2.1.0/topics/theme_update
-## and https://stackoverflow.com/questions/23173915/can-ggplot-theme-formatting-be-saved-as-an-object
-plot_theme <- theme(axis.text = element_text(colour="black"),
-                  axis.ticks = element_line(color="black"))
-
-plot_options <- list(theme_bw(base_size = 12))
-
-## set default aspect ratios
-wide_ar <- 0.75
-square_ar <- 1
-
-```
-
-### Save functions
-```{r}
-
-print_kbl <- function(tbl) {
-  kbl(tbl) %>%
-    kable_styling(full_width = FALSE, 
-                  position = "left",
-                  bootstrap_options = c("striped", "hover", "responsive"))
-}
+## get functions and vars from shared R script
+source(file.path(params$base_dir, "workflow", "scripts", "shared_functions_and_variables.R"))
 
 ```
 
 ```{r}
 
-save_tbl <- function(tbl){
-  tbl_str <- deparse(substitute(tbl))
-  write_tsv(tbl, file.path(out_dir, "tables", "tsv", paste0(tbl_str, ".txt")))
-  write_rds(tbl, file.path(out_dir, "tables", "rds", tbl_str))
-}
+in_dir <- file.path(params$base_dir, "config")
+
+out_dir <- file.path(params$base_dir, "results", "pgRNA_annotations")
 
 ```
-
-
-```{r}
-
-save_plot <- function(plt){
-  plt_str <- deparse(substitute(plt))
-  ggsave(plot = plt, 
-         filename = file.path(out_dir, "plots", "pdf", paste0(plt_str, ".pdf")))
-  ggsave(plot = plt, 
-         filename = file.path(out_dir, "plots", "png", paste0(plt_str, ".png")))
-}
-
-```
-
 
 ### Read in files
 
-#### d.counts
-```{r, results = FALSE, message = FALSE, warning = FALSE}
+```{r, results = FALSE, warning = FALSE}
 
-d.counts_flagged <- read_rds(file.path(in_dir,"tables", "rds", "d.counts_cpm_flag_long"))
-#d.counts
+# if (params$pgRNA_library == "pgPEN"){
+#   d.annot <- read_tsv(file.path(params$base_dir, "config", "pgPEN_library.txt"))
+# } else if (params$pgRNA_library == "other"){
+#   d.annot <- read_tsv(file.path(params$base_dir, "config"))
+# }
 
-# d.plasmid_counts <- read_tsv(file.path(PP_dir, "paralog_library_all.plasmid.counts.txt"))
-
-```
-
-#### pgRNA annotations file
-```{r}
-
-# d.annot <- read_tsv(file.path(in.filepath, "paralog_pgRNA_annotations.txt"))
-#d.annot
+d.annot <- read_tsv(file.path(in_dir, "pgPEN_annotations.txt"))
+d.pan_essential <- read_csv(file.path(in_dir, "Achilles_common_essentials.csv"))
+d.gene_name_to_id <- read_tsv(file.path(in_dir, "hgnc_to_ensembl.txt"))
 
 ```
 
 
-## Calculate LFC
-
-### Reformat d.counts
-```{r}
-
-## calculate LFC
-d.counts_flagged_timepoint <- d.counts_flagged %>%
-  separate(sample, into = c("day", "rep"), sep = "_", remove = FALSE) %>%
-  mutate(day = readr::parse_number(day)) %>%
-  group_by(id) %>%
-  mutate(timepoint = case_when(
-    day == min(day) ~ "plasmid",
-    day == max(day) ~ "late",
-    TRUE ~ "early")) 
-
-```
-
+## Get gene list
 
 ```{r}
 
-## early timepoints
-## this will have to be changed if there are multiple early TP reps
-d.counts_flagged_timepoint_early <- d.counts_flagged_timepoint %>%
-  filter(timepoint == "plasmid" | timepoint == "early") %>%
-  dplyr::select(id, timepoint, log2_cpm) %>%
-  pivot_wider(names_from = timepoint, 
-              values_from = log2_cpm,
-              names_glue = "{timepoint}_{.value}")
-d.counts_flagged_timepoint_early
+## get just gene names and Ensembl IDs
+d.genes <- d.annot %>%
+  filter(target_type == "gene_gene") %>%
+  dplyr::select(paralog_pair, paralog_pair_id) %>%
+  separate_rows(paralog_pair, paralog_pair_id, sep = "_") %>%
+  rename(gene_symbol = paralog_pair, ensembl_id = paralog_pair_id) %>%
+  distinct(gene_symbol, .keep_all = TRUE)
 
-## calculate LFC for plasmid vs. late and early vs. late
-d.counts_flagged_timepoint_lfc <- d.counts_flagged_timepoint %>%
-  filter(timepoint == "late") %>% ## filter for only late timepoints
-  left_join(d.counts_flagged_timepoint_early, by = "id") %>%
-  mutate(lfc_plasmid_vs_late = log2_cpm - plasmid_log2_cpm,
-         lfc_early_vs_late = log2_cpm - early_log2_cpm)
-d.counts_flagged_timepoint_lfc
+```
+
+
+## Get Entrez IDs
+See [ref](https://www.bioconductor.org/packages/devel/bioc/vignettes/biomaRt/inst/doc/accessing_ensembl.html#given-the-human-gene-tp53-retrieve-the-human-chromosomal-location-of-this-gene-and-also-retrieve-the-chromosomal-location-and-refseq-id-of-its-homolog-in-mouse.) for documentation on accessing Entrez IDs via Ensembl. 
+
+```{r}
+
+## get vector of gene IDs
+ensembl_ids <- d.genes %>%
+  pull(ensembl_id)
+
+```
+
+### Ensembl setup
+```{r}
+
+ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", version=94) ## from Oct 2020
+
+## checking Ensembl settings
+filters <- listFilters(ensembl)
+# searchFilters(mart=ensembl, pattern="ensembl.*id")
+# searchAttributes(mart=ensembl, pattern="entrez")
+
+```
+
+
+### Get Entrez IDs from Ensembl database
+```{r}
+
+## get paralog Entrez IDs
+d.all_ids <- getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "entrezgene"),
+                      filters = c("ensembl_gene_id"), 
+                      values = list(ensembl_ids), 
+                      mart = ensembl)
+
+```
+
+
+```{r}
+
+## which genes have multiple Entrez ID entries?
+##   checking this by hand shows that all larger numbers are ncRNAs... 
+##   so for now I will remove them using distinct()
+d.all_ids %>%
+  group_by(hgnc_symbol) %>%
+  summarize(n = n()) %>%
+  filter(n > 1)
+
+## arrange by entrez_id within ensembl_id groups (will only affect genes w/ 1 Ensembl
+##   but multiple Entrez IDs), then use distinct to keep just the first row
+d.all_ids_unique <- d.all_ids %>%
+  rename("entrez_id" = entrezgene, "ensembl_id" = ensembl_gene_id) %>%
+  group_by(ensembl_id) %>%
+  arrange(entrez_id, .by_group = TRUE) %>%
+  distinct(ensembl_id, .keep_all = TRUE)
+# d.all_ids_unique
+
+
+## warning message
+if(nrow(d.all_ids_unique) < nrow(d.genes)){
+  warning("Warning: not all of your genes have matching Entrez IDs!")
+}
 
 ```
 
 ```{r}
 
-## clean up table
-## add annotations
-## get target-level values
-## look at rep correlations
-## look at SSMD
+## join Entrez and HGNC IDs with the original library gene list
+d.pgPEN_gene_ids_all <- d.genes %>%
+  left_join(d.all_ids_unique, by = "ensembl_id") 
+# d.pgPEN_gene_ids_all
+
+rm(ensembl)
 
 ```
 
+
+## Get gene TPM
+
+Reference site for accessing DepMap data:  https://bioconductor.org/packages/release/data/experiment/vignettes/depmap/inst/doc/depmap.html#1_introduction
+
+```{r}
+
+## get TPM and CN information (w/ option for user to upload their own info)
+## add if statement for user TPM/CN vs. DepMap
+## print label/version of dataset - save a tbl? 
+## or use a specific version... hmm... 
+d.depmap_tpm <- depmap::depmap_TPM()
+
+d.depmap_metadata <- depmap::depmap_metadata()
+
+## store DepMap and EH IDs for later use
+depmap_release_id <- depmap::depmap_release()
+eh <- ExperimentHub()
+eh_id <- names(query(eh, c("depmap", paste("TPM", depmap_release_id, sep = "_"))))
+
+```
+
+
+```{r}
+
+my_depmap_id <- d.depmap_metadata %>%
+  filter(grepl(params$cell_line, stripped_cell_line_name, ignore.case = TRUE)) %>%
+  pull(depmap_id)
+## check that there is only 1 hit...what to do if there are no hits? 
+
+## get depmap RNA expression data
+d.depmap_tpm_my_cell_line <- d.depmap_tpm %>%
+  filter(depmap_id == my_depmap_id) %>%
+  dplyr::select(gene_name, entrez_id, rna_expression) %>%
+  rename(depmap_gene_symbol = gene_name, log2_tpm = rna_expression)
+
+```
+
+
+```{r}
+
+## get entrez IDs for my genes (based on their ensembl IDs)
+## write an ifelse statement? if DF contains ensembl IDs -> do that, else get entrez
+## or should I just use entrez regardless? 
+
+
+## add gene expression info to my df
+d.pgPEN_gene_tpm <- d.pgPEN_gene_ids_all %>%
+  left_join(d.depmap_tpm_my_cell_line, by = "entrez_id")
+d.pgPEN_gene_tpm
+
+rm(d.depmap_tpm_my_cell_line)
+
+## ok to ignore any genes w/ tpm = NA because we're just taking the median of
+##   expressed vs. unexpressed gene - it's ok if not all of them have a TPM
+d.pgPEN_gene_tpm %>%
+  filter(is.na(log2_tpm))
+
+d.pgPEN_gene_tpm %>%
+  group_by(gene_symbol) %>%
+  mutate(duplicated = n() > 1) %>%
+  filter(duplicated == TRUE)
+
+## figure out of this is actually going to work for other libraries
+d.pgPEN_gene_tpm_filtered <- d.pgPEN_gene_tpm %>%
+  group_by(gene_symbol) %>%
+  mutate(duplicated = n() > 1) %>%
+  mutate(remove = case_when(
+    duplicated == TRUE & gene_symbol != depmap_gene_symbol ~ TRUE,
+    duplicated == TRUE & gene_symbol == depmap_gene_symbol ~ FALSE,
+    duplicated == FALSE ~ FALSE)) %>%
+  filter(remove == FALSE) %>%
+  dplyr::select(-c(remove, duplicated)) %>%
+  mutate(expressed_flag = case_when(
+    log2_tpm < 1 ~ FALSE,
+    log2_tpm >= 1 ~ TRUE,
+    is.na(log2_tpm) ~ NA))
+
+# d.pgPEN_gene_ids_all %>%
+#   left_join(d.depmap_tpm_my_cell_line, by = c("gene_symbol" = "depmap_gene_symbol"))
+
+## ok so entrez ID works *slightly* better than gene symbol...I guess I'll stick with it
+##   but need to figure out what to do for duplicated values again
+##   just say if gene_symbol == gene_symbol, keep, else get rid of?
+
+```
+
+
+```{r}
+
+d.pgPEN_gene_tpm_filtered_summary <- d.pgPEN_gene_tpm_filtered %>%
+  group_by(expressed_flag) %>%
+  summarize(n = n())
+print_kbl(d.pgPEN_gene_tpm_filtered_summary)
+ 
+library_gene_tpm_with_cutoff <- ggplot(d.pgPEN_gene_tpm_filtered, aes(x = log2_tpm)) +
+  geom_histogram(binwidth = 0.5, color = "black", fill = "darkgray") +  
+  geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+  plot_options +
+  plot_theme +
+  theme(aspect.ratio = wide_ar)
+library_gene_tpm_with_cutoff
+
+save_plot(library_gene_tpm_with_cutoff)
+
+```
+
+## Get gene CN
+
+
+```{r}
+
+d.depmap_cn <- depmap::depmap_copyNumber()
+
+d.depmap_cn_my_cell_line <- d.depmap_cn %>%
+  filter(depmap_id == my_depmap_id) %>%
+  dplyr::select(gene_name, entrez_id, log_copy_number) %>%
+  rename(depmap_gene_symbol = gene_name, log2_cn = log_copy_number)
+d.depmap_cn_my_cell_line
+
+rm(d.depmap_cn)
+
+```
+
+```{r}
+
+d.pgPEN_gene_cn <- d.pgPEN_gene_tpm_filtered %>%
+  left_join(d.depmap_cn_my_cell_line, by = "entrez_id")
+d.pgPEN_gene_cn
+
+```
+
+
+```{r}
+
+## ok to ignore any genes w/ tpm = NA because we're just taking the median of
+##   expressed vs. unexpressed gene - it's ok if not all of them have a TPM
+d.pgPEN_gene_cn_na_summary <- d.pgPEN_gene_cn %>%
+  filter(is.na(log2_cn))
+print_kbl(d.pgPEN_gene_cn_na_summary)
+
+d.pgPEN_gene_cn_duplicated <- d.pgPEN_gene_cn %>%
+  group_by(gene_symbol) %>%
+  mutate(duplicated = n() > 1) %>%
+  filter(duplicated == TRUE)
+print_kbl(d.pgPEN_gene_cn_duplicated)
+
+## figure out of this is actually going to work for other libraries
+# d.pgPEN_gene_cn_filtered <- d.pgPEN_gene_cn %>%
+#   group_by(gene_symbol) %>%
+#   mutate(duplicated = n() > 1) %>%
+#   mutate(remove = case_when(
+#     duplicated == TRUE & gene_symbol != depmap_gene_symbol ~ TRUE,
+#     duplicated == TRUE & gene_symbol == depmap_gene_symbol ~ FALSE,
+#     duplicated == FALSE ~ FALSE)) %>%
+#   filter(remove == FALSE) %>%
+#   dplyr::select(-c(remove, duplicated)) 
+
+```
+
+
+```{r}
+
+library_gene_cn <- ggplot(d.pgPEN_gene_cn, aes(x = log2_cn)) +
+  geom_histogram(binwidth = 0.1, color = "black", fill = "darkgray") +
+  plot_options +
+  plot_theme +
+  theme(aspect.ratio = wide_ar)
+library_gene_cn
+save_plot(library_gene_cn)
+
+```
+
+
+```{r}
+
+d.pgPEN_gene_tpm_cn <- d.pgPEN_gene_cn %>%
+  dplyr::select(-c(depmap_gene_symbol.x, depmap_gene_symbol.y))
+
+
+```
+
+
+## Pan-essentials
+```{r}
+
+## split up gene col into symbol and entrez ID
+d.pan_essential <- d.pan_essential %>%
+  separate(col = gene, into = c("gene_symbol", "entrez_id"), remove = FALSE)
+
+pan_essential_entrez <- d.pan_essential %>%
+  pull(entrez_id)
+
+```
+
+
+```{r}
+
+d.pgPEN_gene_tpm_cn_ctrl <- d.pgPEN_gene_tpm_cn %>%
+  mutate(essential_flag = case_when(
+    entrez_id %in% pan_essential_entrez ~ TRUE,
+    TRUE ~ FALSE)) ## if entrez_id is NA or not in pan-essential Entrez ID list, FALSE 
+
+## number of pan-essential genes in my library
+d.pgPEN_essential_summary <- d.pgPEN_gene_tpm_cn_ctrl %>%
+  group_by(essential_flag) %>%
+  summarize(n = n())
+print_kbl(d.pgPEN_essential_summary)
+
+```
+
+## Add annotations to other dfs
+```{r}
+
+## add gene1 info to df
+d.annot <- d.pgPEN_gene_tpm_cn_ctrl %>%
+  ungroup() %>%
+  dplyr::select(ensembl_id, entrez_id:essential_flag) %>%
+  rename_with(~ paste("gene1", .x, sep = "_")) %>%
+  right_join(d.annot, by = c("gene1_ensembl_id")) 
+
+## add gene2 info to df
+d.annot <- d.pgPEN_gene_tpm_cn_ctrl %>%
+  ungroup() %>%
+  dplyr::select(ensembl_id, entrez_id:essential_flag) %>%
+  rename_with(~ paste("gene2", .x, sep = "_")) %>%
+  right_join(d.annot, by = c("gene2_ensembl_id")) 
+
+```
+
+```{r}
+
+d.annot
+
+d.annot <- d.annot %>%
+  mutate(norm_ctrl_flag = case_when(
+    target_type == "gene_gene" ~ "double_targeting",
+    target_type == "gene_ctrl" & gene1_essential_flag == TRUE ~ "positive_control",
+    target_type == "ctrl_gene" & gene2_essential_flag == TRUE ~ "positive_control",
+    target_type == "gene_ctrl" & gene1_essential_flag != TRUE ~ "single_targeting", 
+    target_type == "ctrl_gene" & gene2_essential_flag != TRUE ~ "single_targeting",
+    target_type == "ctrl_ctrl" ~ "negative_control")) %>%
+  mutate(norm_ctrl_flag = factor(norm_ctrl_flag, levels = c("negative_control",
+                                                            "positive_control",
+                                                            "single_targeting",
+                                                            "double_targeting")))
+
+## add a flag 
+d.annot_norm_ctrl_summary <- d.annot %>%
+  group_by(norm_ctrl_flag) %>%
+  summarize(n = n())
+print_kbl(d.annot_norm_ctrl_summary)
+
+```
+
+## pgRNA targets
+```{r}
+
+d.annot_neg_ctrl_only <- d.annot %>%
+  filter(target_type == "ctrl_ctrl") %>%
+  dplyr::select(pgRNA_id)
+
+## making fake "genes" for ctrl_ctrl pgRNAs so I can normalize like the others
+## Q: is this necessary if I'm not using MAGeCK? 
+set.seed(123)
+
+fake_gene_nums <- rep(seq(from = 1, to = 50, by = 1), 10)
+
+# randomize the vector
+fake_gene_nums <- sample(fake_gene_nums, size = 500)
+
+d.annot_neg_ctrl_only <- d.annot_neg_ctrl_only %>% 
+  mutate(pgRNA_target = paste("FAKE_GENE", fake_gene_nums, sep="_"))
+
+
+# d.annot_neg_ctrl_only
+
+save_tbl(d.annot_neg_ctrl_only)
+
+```
+
+```{r}
+
+## get target info back into DF 
+d.annot_ko <- d.annot %>%
+  filter(target_type != "ctrl_ctrl") %>%
+  mutate(pgRNA_target = case_when(
+    target_type == "gene_gene" ~ paste(gene1_symbol, gene2_symbol, sep = "_"),
+    target_type == "gene_ctrl" ~ paste(gene1_symbol, "ctrl", sep = "_"),
+    target_type == "ctrl_gene" ~ paste("ctrl", gene2_symbol, sep = "_")
+  ))
+
+## - add ctrl_ctrl pgRNAs back into the df
+d.annot_ctrl <- d.annot %>%
+  filter(target_type == "ctrl_ctrl") %>%
+  left_join(d.annot_neg_ctrl_only, by = "pgRNA_id") 
+
+d.annot <- bind_rows(d.annot_ko, d.annot_ctrl)
+
+```
+
+```{r}
+
+## remove gene symbols and info for control sgRNAs in single-targeting pgRNAs
+d.annot <- d.annot %>%
+  mutate_at(vars(starts_with("gene1")), ~replace(., target_type == "ctrl_gene", NA),
+            vars(starts_with("gene2")), ~replace(., target_type == "gene_ctrl", NA)) %>%
+  ## rearrange columns in d.annot 
+  dplyr::select(pgRNA_id, paralog_pair, target_type, pgRNA_target, gRNA1_seq, gRNA2_seq,
+                norm_ctrl_flag, paralog_pair_id, gene1_symbol, starts_with("gene1"), 
+                gene2_symbol, starts_with("gene2"))
+
+```
+
+## Save output
+```{r}
+
+save_tbl(d.annot)
+
+
+```
 
 
 
