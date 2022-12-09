@@ -1,0 +1,11 @@
+name: LFC_and_GI_calcs
+channels:
+  - conda-forge
+dependencies:
+  - r-base=4.1.0
+  - r-kableextra=1.3.4
+  - r-knitr=1.40
+  - r-tidyverse=1.3.1
+  - r-rcolorbrewer=1.1
+  - r-rmarkdown=2.16
+  - r-tidylog=1.0.2
