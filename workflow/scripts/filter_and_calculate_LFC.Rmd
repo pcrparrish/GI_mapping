@@ -67,6 +67,8 @@ library(corrr)
 ## get functions and vars from shared R script
 source(file.path(params$base_dir, "workflow", "scripts", "shared_functions_and_variables.R"))
 
+contour_palette <- colorRampPalette(brewer.pal(n = 9, name ="Spectral"))(50)
+
 ```
 
 ```{r global_options}

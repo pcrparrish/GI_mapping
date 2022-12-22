@@ -22,12 +22,12 @@ cell_line_list = []
 for file in os.scandir(pgRNA_counts_dir): ## file is a POSIX object, not a str
     if file.is_file() and not file.name.startswith('.'):
         counts_file_list.append(file.path)
-        print(file.path)
-        print(file.name)
+        # print(file.path)
+        # print(file.name)
         cell_line = file.name.split("_")[2]
         cell_line_list.append(cell_line)
-print("counts_file_list =", counts_file_list)
-print("cell_line_list =", cell_line_list)
+# print("counts_file_list =", counts_file_list)
+# print("cell_line_list =", cell_line_list)
 
 
 ## rule all is used to define output file names for the final rule & for other
@@ -37,7 +37,15 @@ rule all:
     input:
         # expand(pgRNA_counts_QC_dir + config["base_sample_name"] + "_{cell_line}_counts_QC.html",
         #     cell_line = cell_line_list)
-        expand("results/calculate_LFC/tables/rds/{cell_line}_GI_scores_target.txt",
+        expand("results/calculate_GI_scores/tables/tsv/{cell_line}_GI_scores_target.txt",
+            cell_line = cell_line_list),
+        expand("results/pgRNA_counts_QC/" + config["base_sample_name"] + "_{cell_line}_counts_QC.html",
+            cell_line = cell_line_list),
+        expand("results/pgRNA_annotations/" + config["base_sample_name"] + "_{cell_line}_get_pgRNA_annotations.html",
+            cell_line = cell_line_list),
+        expand("results/calculate_LFC/" + config["base_sample_name"] + "_{cell_line}_filter_and_calculate_LFC.html",
+            cell_line = cell_line_list),
+        expand("results/calculate_GI_scores/" + config["base_sample_name"] + "_{cell_line}_calculate_GI_scores.html",
             cell_line = cell_line_list)
         # gRNA_counts_dir + config["base_sample_name"] + ".count.txt"
 
@@ -48,7 +56,8 @@ rule pgRNA_counts_QC:
         pgRNA_counts_dir + config["base_sample_name"] + "_{cell_line}_counts.txt"
     output:
         ## convert to a report param, change output to TXT file?
-        "results/pgRNA_counts_QC/tables/rds/d.{cell_line}_counts_cpm_flag_long"
+        "results/pgRNA_counts_QC/tables/rds/d.{cell_line}_counts_cpm_flag_long",
+        "results/pgRNA_counts_QC/" + config["base_sample_name"] + "_{cell_line}_counts_QC.html"
     conda:
         "envs/pgRNA_counts_QC.yaml"
     params:
@@ -77,20 +86,21 @@ rule get_pgRNA_annotations:
     input:
         pgRNA_counts_dir + config["base_sample_name"] + "_{cell_line}_counts.txt"
     output:
-        "results/get_pgRNA_annotations/tables/rds/d.{cell_line}_annot"
+        "results/pgRNA_annotations/tables/rds/d.{cell_line}_annot",
+        "results/pgRNA_annotations/" + config["base_sample_name"] + "_{cell_line}_get_pgRNA_annotations.html"
     conda:
         "envs/get_pgRNA_annotations.yaml"
     params:
         script = "workflow/scripts/get_pgRNA_annotations.Rmd",
         base_dir = config["base_dir"],
-        out_dir = "results/get_pgRNA_annotations",
-        report = config["base_sample_name"] + "_{cell_line}_counts_QC.html"
+        out_dir = "results/pgRNA_annotations",
+        report = config["base_sample_name"] + "_{cell_line}_get_pgRNA_annotations.html"
     log:
-        "workflow/logs/pgRNA_counts_QC/{cell_line}.log"
+        "workflow/logs/get_pgRNA_annotations/{cell_line}.log"
     shell:
         """
         mkdir -p {params.out_dir}
-        mkdir -p "workflow/logs/pgRNA_counts_QC/"
+        mkdir -p "workflow/logs/get_pgRNA_annotations/"
 
         ## note: single quotes must be used so R doesn't interpret special chars
         Rscript -e "rmarkdown::render('{params.script}',
@@ -103,10 +113,11 @@ rule get_pgRNA_annotations:
 
 rule calculate_LFC:
     input:
-        counts = "results/pgRNA_counts_QC/tables/rds/d.{cell_line}_counts_cpm_flag_long",
-        annot = "results/get_pgRNA_annotations/tables/rds/d.{cell_line}_annot"
+        "results/pgRNA_counts_QC/tables/rds/d.{cell_line}_counts_cpm_flag_long",
+        "results/pgRNA_annotations/tables/rds/d.{cell_line}_annot"
     output:
-        "results/calculate_LFC/tables/rds/d.{cell_line}_lfc_annot_adj_pgRNA"
+        "results/calculate_LFC/tables/rds/d.{cell_line}_lfc_annot_adj_pgRNA",
+        "results/calculate_LFC/" + config["base_sample_name"] + "_{cell_line}_filter_and_calculate_LFC.html"
     conda:
         "envs/LFC_and_GI_calcs.yaml"
     params:
@@ -134,7 +145,8 @@ rule calculate_GI_scores:
     input:
         "results/calculate_LFC/tables/rds/d.{cell_line}_lfc_annot_adj_pgRNA"
     output:
-        "results/calculate_LFC/tables/rds/{cell_line}_GI_scores_target.txt"
+        "results/calculate_GI_scores/tables/tsv/{cell_line}_GI_scores_target.txt",
+        "results/calculate_GI_scores/" + config["base_sample_name"] + "_{cell_line}_calculate_GI_scores.html"
     conda:
         "envs/LFC_and_GI_calcs.yaml"
     params:

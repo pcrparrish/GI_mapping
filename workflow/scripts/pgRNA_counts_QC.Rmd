@@ -67,6 +67,8 @@ library(kableExtra) # for formatting kables
 ## get functions and vars from shared R script
 source(file.path(params$base_dir, "workflow", "scripts", "shared_functions_and_variables.R"))
 
+contour_palette <- colorRampPalette(brewer.pal(n = 9, name ="Spectral"))(50)
+
 ```
 
 
@@ -358,13 +360,13 @@ print_kbl(d.summ_complete)
 
 ## add counts back into flagged df, write output
 d.counts_cpm_flag_long <- left_join(d.counts_cpm, d.counts_cpm_filter, by = "id")
-# save_tbl(d.counts_cpm_flag_long)
+save_tbl(d.counts_cpm_flag_long)
 
 d.counts_cpm_flag_wide <- d.counts_cpm_flag_long %>%
   pivot_wider(names_from = sample, 
               values_from = count:log2_cpm,
               names_glue = "{sample}_{.value}")
-# save_tbl(d.counts_cpm_flag_wide)
+save_tbl(d.counts_cpm_flag_wide)
 
 ```
 

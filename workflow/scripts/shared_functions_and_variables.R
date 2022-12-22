@@ -9,8 +9,6 @@ plot_theme <- theme(axis.text = element_text(colour="black"),
 
 plot_options <- list(theme_bw(base_size = 12))
 
-contour_palette <- colorRampPalette(brewer.pal(n = 9, name ="Spectral"))(50)
-
 
 ## set default aspect ratios
 wide_ar <- 0.75
