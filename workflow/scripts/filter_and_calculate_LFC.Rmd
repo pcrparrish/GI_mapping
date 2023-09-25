@@ -8,47 +8,7 @@ params:
   base_dir: "/Volumes/Projects/paralog_pgRNA/pgPEN_library/GI_mapping"
 ---
 
-## Rmd knit notes
-https://stackoverflow.com/questions/32479130/passing-parameters-to-r-markdown
-https://stackoverflow.com/questions/31463143/pass-parameters-from-command-line-into-r-markdown-document
-
-
-## To Do
-* add steps to filter out screens with SSMD < -0.5 or replicate correlation <0.7? 
-* use only expressed pan-essential genes as + controls? 
-* add "Rep" back into replicate labels
-* add in early vs. late LFC? adjust as well? 
-* clean up tibble earlier - get rid of extra unnecessary columns so it's more readable, drop old columns when necessary
-* get broad_target_type back in?
-* make plots that I want to do before & after adjusting functions? 
-* make target mean expression density plots for single- and double-targeting pgRNAs
-* flag if reps have SSMD > -0.5 & add in an option for user to re-run and remove them
-
-
 ## Setup
-```{r, include = FALSE, eval = FALSE}
-
-## possible params for future use: 
-# params: 
-#   counts_file: 
-#     value: x
-#   output_dir: 
-#     value: x
-# knit: (function(inputFile, encoding) {
-#     rmarkdown::render(inputFile, 
-#       encoding = encoding, 
-#       output_dir = "`r params$output_dir`")
-#   })
-# knit: function(inputFile, encoding){
-#   rmarkdown::render(inputFile, 
-#     encoding = encoding, 
-#     output_dir = "../results/pgRNA_counts_QC")}
-
-```
-
-
-
-
 ### Load packages
 ```{r setup, results = FALSE, message = FALSE, warning = FALSE}
 
@@ -68,13 +28,6 @@ library(corrr)
 source(file.path(params$base_dir, "workflow", "scripts", "shared_functions_and_variables.R"))
 
 contour_palette <- colorRampPalette(brewer.pal(n = 9, name ="Spectral"))(50)
-
-```
-
-```{r global_options}
-
-## knitr options
-# source(file.path(params$base_dir, "workflow", "scripts", "shared_Rmd_settings.R"))
 
 ```
 
@@ -226,14 +179,12 @@ d.counts_flagged_timepoint <- d.counts_flagged %>%
 ```{r}
 
 ## early timepoints
-## this will have to be changed if there are multiple early TP reps
 d.counts_flagged_timepoint_early <- d.counts_flagged_timepoint %>%
   filter(timepoint == "plasmid" | timepoint == "early") %>%
   dplyr::select(id, timepoint, log2_cpm) %>%
   pivot_wider(names_from = timepoint, 
               values_from = log2_cpm,
               names_glue = "{timepoint}_{.value}")
-d.counts_flagged_timepoint_early
 
 ## calculate LFC for plasmid vs. late and early vs. late
 d.counts_flagged_timepoint_lfc <- d.counts_flagged_timepoint %>%
@@ -241,7 +192,6 @@ d.counts_flagged_timepoint_lfc <- d.counts_flagged_timepoint %>%
   left_join(d.counts_flagged_timepoint_early, by = "id") %>%
   mutate(lfc_plasmid_vs_late = log2_cpm - plasmid_log2_cpm,
          lfc_early_vs_late = log2_cpm - early_log2_cpm)
-d.counts_flagged_timepoint_lfc
 
 ```
 
@@ -251,8 +201,6 @@ d.counts_flagged_timepoint_lfc
 d.lfc_annot <- d.counts_flagged_timepoint_lfc %>%
   left_join(d.annot, by = c("id" = "pgRNA_id")) %>%
   rename("pgRNA_id" = id)
-
-# d.lfc_annot
 
 d.removed_pgRNAs <- d.lfc_annot %>%
   dplyr::select(pgRNA_id, paralog_pair, low_plasmid_cpm, zero_count, rm_pgRNA) %>%
@@ -270,19 +218,6 @@ d.lfc_annot <- d.lfc_annot %>%
 ## Before adjusting LFC
 ```{r}
 
-# d.lfc_annot %>%
-#   ggplot(aes(x = norm_ctrl_flag, y = lfc_plasmid_vs_late, fill = norm_ctrl_flag)) +
-#   geom_hline(yintercept = 0) +
-#   geom_violin() +
-#   geom_boxplot(outlier.shape = NA, coef = 0, width = 0.1) +
-#   labs(x = "pgRNA_category") +
-#   plot_options +
-#   plot_theme +
-#   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-#         legend.position = "none",
-#         aspect.ratio = wide_ar) +
-#   facet_wrap(~rep)
-
 unadjusted_norm_ctrl_violin_plot <- make_norm_ctrl_violin_plot(d.lfc_annot, "lfc_plasmid_vs_late", "raw_LFC")
 
 unadjusted_norm_ctrl_violin_plot +
@@ -295,8 +230,6 @@ Note that negative control pgRNAs will appear to be positively selected. This is
 
 ### Calculate SSMD
 ```{r}
-
-# d.lfc_annot
 
 d.lfc_annot %>%
   filter(norm_ctrl_flag == "negative_control" | norm_ctrl_flag == "positive_control") %>%
@@ -349,8 +282,6 @@ results <- get_rep_cor_dfs(d.lfc_annot, "pgRNA_id", "lfc_plasmid_vs_late")
 d.unadj_lfc_rep_cor_plot <- results[[1]]
 d.unadj_lfc_rep_cor_summary <- results[[2]]
 
-# d.unadj_lfc_rep_cor_plot
-
 print_kbl(d.unadj_lfc_rep_cor_summary)
 
 ```
@@ -359,7 +290,6 @@ print_kbl(d.unadj_lfc_rep_cor_summary)
 
 ## make replicate correlation plot
 make_rep_cor_plot(d.unadj_lfc_rep_cor_plot, d.unadj_lfc_rep_cor_summary, "LFC")
-
 
 ```
 
@@ -376,7 +306,6 @@ d.lfc_rep_cor <- d.lfc_annot %>%
   dplyr::select(pgRNA_id, rep, lfc_plasmid_vs_late) %>%
   pivot_wider(names_from = rep,
               values_from = lfc_plasmid_vs_late) 
-# d.lfc_rep_cor
 
 d.cor <- d.lfc_rep_cor %>%
   dplyr::select(-pgRNA_id) %>%
@@ -386,7 +315,6 @@ d.cor <- d.lfc_rep_cor %>%
   filter(!is.na(r)) %>%
   unite(c(x, y), col = "comparison", sep = "_vs_", remove = FALSE) %>%
   rename("sample1" = x, "sample2" = y)
-
 
 comparisons <- d.cor %>% pull(comparison)
 
@@ -451,27 +379,11 @@ d.lfc_annot_adj <- d.lfc_annot %>%
          lfc_adj2 = lfc_adj1 / (median(lfc_adj1[norm_ctrl_flag == "negative_control"]) -
                                   median(lfc_adj1[norm_ctrl_flag == "positive_control"]))) %>%
   ungroup()
-d.lfc_annot_adj
 
 ```
 
 
 ```{r}
-
-## plot adjusted violin plot
-# d.lfc_annot_adj %>%
-#   ggplot(aes(x = norm_ctrl_flag, y = lfc_adj2, fill = norm_ctrl_flag)) +
-#   geom_hline(yintercept = 0) +
-#   geom_violin() +
-#   geom_boxplot(outlier.shape = NA, coef = 0, width = 0.1) +
-#   labs(x = "pgRNA_category",
-#        y = "adjusted_lfc") +
-#   plot_options +
-#   plot_theme +
-#   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-#         legend.position = "none",
-#         aspect.ratio = wide_ar) +
-#   facet_wrap(~rep)
 
 adjusted_norm_ctrl_violin_plot <- make_norm_ctrl_violin_plot(d.lfc_annot_adj, "lfc_adj2", "adjusted_LFC")
 
@@ -511,8 +423,6 @@ print_kbl(d.lfc_annot_adj_single_summary)
 
 
 ```{r}
-
-## plot before & after?
 
 d.lfc_annot_adj_single %>%
   filter(!is.na(gene1_log2_tpm) | !is.na(gene2_log2_tpm)) %>%
@@ -569,7 +479,6 @@ d.lfc_annot_adj_double_plot_summary <- d.lfc_annot_adj_double_plot %>%
   group_by(rep, n_genes_expressed) %>%
   summarize(median = median(lfc_adj3))
 
-
 ```
 
 
@@ -597,8 +506,6 @@ d.lfc_annot_adj_control <- d.lfc_annot_adj %>%
   mutate(lfc_adj3 = lfc_adj2)
 
 ### single targeting
-# colnames(d.lfc_annot_adj_single)
-
 d.lfc_annot_adj_single <- d.lfc_annot_adj_single %>%
   dplyr::select(-unexpressed_ctrl_flag)
 
@@ -650,8 +557,6 @@ results <- get_rep_cor_dfs(d.lfc_annot_adj_target, "pgRNA_target", "target_mean_
 d.adj_mean_lfc_rep_cor_plot <- results[[1]]
 d.adj_mean_lfc_rep_cor_summary <- results[[2]]
 
-# d.unadj_lfc_rep_cor_plot
-
 print_kbl(d.adj_mean_lfc_rep_cor_summary)
 
 ```
@@ -660,7 +565,6 @@ print_kbl(d.adj_mean_lfc_rep_cor_summary)
 
 ## make replicate correlation plot
 make_rep_cor_plot(d.adj_mean_lfc_rep_cor_plot, d.adj_mean_lfc_rep_cor_summary, "target_mean_CS")
-
 
 ```
 
@@ -688,8 +592,6 @@ d.lfc_annot_adj_target_rep_mean <- d.lfc_annot_adj_target %>%
 rep_mean_adjusted_norm_ctrl_violin_plot <- make_norm_ctrl_violin_plot(d.lfc_annot_adj_target_rep_mean, "rep_target_mean_CS", "mean_adjusted_LFC_across_reps")
 
 rep_mean_adjusted_norm_ctrl_violin_plot
-
-# adjusted_norm_ctrl_violin_plot
 
 ```
 

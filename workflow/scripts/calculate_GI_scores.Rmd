@@ -9,20 +9,6 @@ params:
 ---
 
 
-## To Do
-* add text to explain GI score calculations (include links to source papers)
-* figure out where to average across reps
-* confirm that the # of double-targeting pgRNAs filtered out in the expected GI score step corresponds to single-targeting pgRNAs that were filtered out due to low read counts, etc., in previous QC steps
-* use Jesse's suggestion and/or Han paper approach to deal with the issues around the Global Epistasis Model
-* calculate mean across reps in LFC script, then add that in as a "replicate" for all calculations in this script
-* give user the option of using parametric or non-parametric test?
-* figure out how to print tables in a better way
-* make (& label) volcano plot(s)
-* take mean across reps
-* plot top individual paralog pairs
-* add in binned median GI score calculations
-
-
 ## Setup
 
 ### Load packages
@@ -46,12 +32,6 @@ contour_palette <- colorRampPalette(brewer.pal(n = 9, name ="Spectral"))(50)
 
 ```
 
-```{r global_options}
-
-## knitr options
-# source(file.path(params$base_dir, "workflow", "scripts", "shared_Rmd_settings.R"))
-
-```
 
 ```{r}
 
@@ -83,8 +63,6 @@ d.lfc_pgRNA <- read_rds(file.path(in_dir, "tables", "rds", paste0("d.", params$c
 ### Double-targeting pgRNAs
 
 #### Expected GI score
-
-**Insert explanation of how to calculate expected GI scores here** 
 
 ```{r}
 
@@ -157,18 +135,6 @@ d.lfc_pgRNA_double_targeting <- d.lfc_pgRNA_double_targeting %>%
 
 ```
 
-```{r}
-
-# d.rm_double_targeting_pgRNAs %>%
-#   ungroup() %>%
-#   distinct(pgRNA_id, .keep_all = TRUE) %>%
-#   group_by(paralog_pair) %>%
-#   summarize(n = n())
-# 
-# d.rm_double_targeting_pgRNAs
-
-```
-
 
 ### Single-targeting
 ```{r}
@@ -224,7 +190,6 @@ d.lfc_pgRNA_single_targeting <- d.lfc_pgRNA_single_targeting %>%
 d.lfc_pgRNA_single_targeting <- d.lfc_pgRNA_single_targeting %>%
   left_join(y = d.mean_double_control_CS, by = c("rep", "control_gRNA_seq"))
 
-# d.lfc_pgRNA_single_targeting
 ```
 
 
@@ -378,17 +343,8 @@ d.GI_scores_pgRNA_single <- d.lfc_pgRNA_single_targeting_GI %>%
 ### Calculate p-values
 ```{r}
 
-## Wilcoxon rank-sum test (nonparametric)
-# d.GI_scores_pgRNA %>%
-#   group_by(rep) %>%
-#   mutate(p_val = wilcox.test(GI_score ~ broad_target_type, paired = FALSE)$p.value)
-
 ## t-test (parametric)
 ## use lapply to run for each rep, then bind results
-# d.GI_scores_pgRNA <- d.GI_scores_pgRNA %>%
-#   group_by(rep) %>%
-#   mutate(p_val = t.test(GI_score ~ broad_target_type, paired = FALSE)$p.value)
-
 reps <- d.GI_scores_pgRNA_double %>%
   ungroup() %>%
   distinct(rep) %>% 
@@ -432,7 +388,6 @@ results <- lapply(reps, function(i){
 })
 
 d.GI_scores_pgRNA_double <- bind_rows(results)
-# results
 
 ```
 
@@ -472,7 +427,6 @@ d.GI_scores_target <- d.GI_scores_pgRNA %>%
 d.GI_scores_target %>%
   group_by(rep) %>%
   summarize(n = n())
-## why only 3,086 targets not 3,090? some had too many single-targeting pgRNAs filtered out
 
 ggplot(d.GI_scores_target, aes(x = mean_expected_CS, y = mean_observed_CS, color = broad_target_type)) +
   geom_point() + 
@@ -484,10 +438,6 @@ ggplot(d.GI_scores_target, aes(x = mean_expected_CS, y = mean_observed_CS, color
   plot_theme +
   theme(aspect.ratio = square_ar) +
   facet_wrap(~rep)
-
-## volcano plot(s)
-## take mean across reps
-## anything else?? 
 
 ```
 

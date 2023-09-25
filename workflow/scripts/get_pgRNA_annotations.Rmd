@@ -11,50 +11,6 @@ params:
   cn_source: "depmap"
 ---
 
-## Rmd knit notes
-https://stackoverflow.com/questions/32479130/passing-parameters-to-r-markdown
-https://stackoverflow.com/questions/31463143/pass-parameters-from-command-line-into-r-markdown-document
-
-
-## To Do
-* fix select calls after adding target_type to original DF and renaming pgRNA_id
-* update params options to be pgPEN and other
-* fix reading in files to make a function^
-* split up so that the new reference files are used - .gitignore code that is not necessary & keep for reference
-* figure out what to do if there are multiple hits for your cell line name in DepMap
-* figure out how to control the version of DepMap that is used for the analysis (get user input??)
-* remove pgPEN from variable names (change to just lib?)
-* return or just print the DepMap IDs...and then I guess I can check the log file or something? 
-* add option to input your own RNAseq or CN data (include documentation on format)
-* add param to specify which ID to join by? 
-* compare new annotations to "old" to make sure everything looks right
-* figure out how to dynamically do the fake_gene_num seq if they are not using pgPEN
-* add pgRNA_target for all pgRNAs
-* reorganize columns & write output files
-
-
-## Setup
-```{r, include = FALSE, eval = FALSE}
-
-## possible params for future use: 
-# params: 
-#   counts_file: 
-#     value: x
-#   output_dir: 
-#     value: x
-# knit: (function(inputFile, encoding) {
-#     rmarkdown::render(inputFile, 
-#       encoding = encoding, 
-#       output_dir = "`r params$output_dir`")
-#   })
-# knit: function(inputFile, encoding){
-#   rmarkdown::render(inputFile, 
-#     encoding = encoding, 
-#     output_dir = "../results/pgRNA_counts_QC")}
-
-```
-
-
 ```{r, include = FALSE}
 
 knitr::opts_chunk$set(
@@ -96,12 +52,6 @@ out_dir <- file.path(params$base_dir, "results", "pgRNA_annotations")
 
 ```{r, results = FALSE, warning = FALSE}
 
-# if (params$pgRNA_library == "pgPEN"){
-#   d.annot <- read_tsv(file.path(params$base_dir, "config", "pgPEN_library.txt"))
-# } else if (params$pgRNA_library == "other"){
-#   d.annot <- read_tsv(file.path(params$base_dir, "config"))
-# }
-
 d.annot <- read_tsv(file.path(in_dir, "pgPEN_annotations.txt"))
 d.pan_essential <- read_csv(file.path(in_dir, "Achilles_common_essentials.csv"))
 d.gene_name_to_id <- read_tsv(file.path(in_dir, "hgnc_to_ensembl.txt"))
@@ -142,8 +92,6 @@ ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", versio
 
 ## checking Ensembl settings
 filters <- listFilters(ensembl)
-# searchFilters(mart=ensembl, pattern="ensembl.*id")
-# searchAttributes(mart=ensembl, pattern="entrez")
 
 ```
 
@@ -163,8 +111,8 @@ d.all_ids <- getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "entrezgene"),
 ```{r}
 
 ## which genes have multiple Entrez ID entries?
-##   checking this by hand shows that all larger numbers are ncRNAs... 
-##   so for now I will remove them using distinct()
+##   checking this by hand shows that all larger numbers are ncRNAs 
+##   so I will remove them using distinct()
 d.all_ids %>%
   group_by(hgnc_symbol) %>%
   summarize(n = n()) %>%
@@ -192,7 +140,6 @@ if(nrow(d.all_ids_unique) < nrow(d.genes)){
 ## join Entrez and HGNC IDs with the original library gene list
 d.pgPEN_gene_ids_all <- d.genes %>%
   left_join(d.all_ids_unique, by = "ensembl_id") 
-# d.pgPEN_gene_ids_all
 
 rm(ensembl)
 
@@ -205,10 +152,7 @@ Reference site for accessing DepMap data:  https://bioconductor.org/packages/rel
 
 ```{r}
 
-## get TPM and CN information (w/ option for user to upload their own info)
-## add if statement for user TPM/CN vs. DepMap
-## print label/version of dataset - save a tbl? 
-## or use a specific version... hmm... 
+## get TPM and CN information 
 d.depmap_tpm <- depmap::depmap_TPM()
 
 d.depmap_metadata <- depmap::depmap_metadata()
@@ -226,7 +170,6 @@ eh_id <- names(query(eh, c("depmap", paste("TPM", depmap_release_id, sep = "_"))
 my_depmap_id <- d.depmap_metadata %>%
   filter(grepl(params$cell_line, stripped_cell_line_name, ignore.case = TRUE)) %>%
   pull(depmap_id)
-## check that there is only 1 hit...what to do if there are no hits? 
 
 ## get depmap RNA expression data
 d.depmap_tpm_my_cell_line <- d.depmap_tpm %>%
@@ -239,12 +182,7 @@ d.depmap_tpm_my_cell_line <- d.depmap_tpm %>%
 
 ```{r}
 
-## get entrez IDs for my genes (based on their ensembl IDs)
-## write an ifelse statement? if DF contains ensembl IDs -> do that, else get entrez
-## or should I just use entrez regardless? 
-
-
-## add gene expression info to my df
+## add gene expression info to df
 d.pgPEN_gene_tpm <- d.pgPEN_gene_ids_all %>%
   left_join(d.depmap_tpm_my_cell_line, by = "entrez_id")
 d.pgPEN_gene_tpm
@@ -261,7 +199,6 @@ d.pgPEN_gene_tpm %>%
   mutate(duplicated = n() > 1) %>%
   filter(duplicated == TRUE)
 
-## figure out of this is actually going to work for other libraries
 d.pgPEN_gene_tpm_filtered <- d.pgPEN_gene_tpm %>%
   group_by(gene_symbol) %>%
   mutate(duplicated = n() > 1) %>%
@@ -275,13 +212,6 @@ d.pgPEN_gene_tpm_filtered <- d.pgPEN_gene_tpm %>%
     log2_tpm < 1 ~ FALSE,
     log2_tpm >= 1 ~ TRUE,
     is.na(log2_tpm) ~ NA))
-
-# d.pgPEN_gene_ids_all %>%
-#   left_join(d.depmap_tpm_my_cell_line, by = c("gene_symbol" = "depmap_gene_symbol"))
-
-## ok so entrez ID works *slightly* better than gene symbol...I guess I'll stick with it
-##   but need to figure out what to do for duplicated values again
-##   just say if gene_symbol == gene_symbol, keep, else get rid of?
 
 ```
 
@@ -333,8 +263,6 @@ d.pgPEN_gene_cn
 
 ```{r}
 
-## ok to ignore any genes w/ tpm = NA because we're just taking the median of
-##   expressed vs. unexpressed gene - it's ok if not all of them have a TPM
 d.pgPEN_gene_cn_na_summary <- d.pgPEN_gene_cn %>%
   filter(is.na(log2_cn))
 print_kbl(d.pgPEN_gene_cn_na_summary)
@@ -344,17 +272,6 @@ d.pgPEN_gene_cn_duplicated <- d.pgPEN_gene_cn %>%
   mutate(duplicated = n() > 1) %>%
   filter(duplicated == TRUE)
 print_kbl(d.pgPEN_gene_cn_duplicated)
-
-## figure out of this is actually going to work for other libraries
-# d.pgPEN_gene_cn_filtered <- d.pgPEN_gene_cn %>%
-#   group_by(gene_symbol) %>%
-#   mutate(duplicated = n() > 1) %>%
-#   mutate(remove = case_when(
-#     duplicated == TRUE & gene_symbol != depmap_gene_symbol ~ TRUE,
-#     duplicated == TRUE & gene_symbol == depmap_gene_symbol ~ FALSE,
-#     duplicated == FALSE ~ FALSE)) %>%
-#   filter(remove == FALSE) %>%
-#   dplyr::select(-c(remove, duplicated)) 
 
 ```
 
@@ -376,7 +293,6 @@ save_plot(library_gene_cn)
 
 d.pgPEN_gene_tpm_cn <- d.pgPEN_gene_cn %>%
   dplyr::select(-c(depmap_gene_symbol.x, depmap_gene_symbol.y))
-
 
 ```
 
@@ -430,8 +346,6 @@ d.annot <- d.pgPEN_gene_tpm_cn_ctrl %>%
 
 ```{r}
 
-d.annot
-
 d.annot <- d.annot %>%
   mutate(norm_ctrl_flag = case_when(
     target_type == "gene_gene" ~ "double_targeting",
@@ -461,7 +375,6 @@ d.annot_neg_ctrl_only <- d.annot %>%
   dplyr::select(pgRNA_id)
 
 ## making fake "genes" for ctrl_ctrl pgRNAs so I can normalize like the others
-## Q: is this necessary if I'm not using MAGeCK? 
 set.seed(123)
 
 fake_gene_nums <- rep(seq(from = 1, to = 50, by = 1), 10)
@@ -471,9 +384,6 @@ fake_gene_nums <- sample(fake_gene_nums, size = 500)
 
 d.annot_neg_ctrl_only <- d.annot_neg_ctrl_only %>% 
   mutate(pgRNA_target = paste("FAKE_GENE", fake_gene_nums, sep="_"))
-
-
-# d.annot_neg_ctrl_only
 
 save_tbl(d.annot_neg_ctrl_only)
 
@@ -490,7 +400,7 @@ d.annot_ko <- d.annot %>%
     target_type == "ctrl_gene" ~ paste("ctrl", gene2_symbol, sep = "_")
   ))
 
-## - add ctrl_ctrl pgRNAs back into the df
+## add ctrl_ctrl pgRNAs back into the df
 d.annot_ctrl <- d.annot %>%
   filter(target_type == "ctrl_ctrl") %>%
   left_join(d.annot_neg_ctrl_only, by = "pgRNA_id") 

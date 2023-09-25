@@ -8,44 +8,13 @@ params:
   base_dir: "/Volumes/Projects/paralog_pgRNA/pgPEN_library/GI_mapping"
 ---
 
-
-## To Do
-* convert sample list to factor - make sure there is a consistent naming scheme in the barcode ref file, then use that somehow? Sort it alphabetically?
-* write a function to summarize n and percent of TRUE values, return n(TRUE)
-* allow user to input cutoff used to filter reads
-
-
 ## Setup
-```{r, include = FALSE, eval = FALSE}
-
-## possible params for future use: 
-# params: 
-#   counts_file: 
-#     value: x
-#   output_dir: 
-#     value: x
-# knit: (function(inputFile, encoding) {
-#     rmarkdown::render(inputFile, 
-#       encoding = encoding, 
-#       output_dir = "`r params$output_dir`")
-#   })
-# knit: function(inputFile, encoding){
-#   rmarkdown::render(inputFile, 
-#     encoding = encoding, 
-#     output_dir = "../results/pgRNA_counts_QC")}
-
-```
-
 
 ```{r, include = FALSE, echo = FALSE, cache = FALSE}
 
 knitr::opts_chunk$set(
   results = "hold"
 )
-
-# knitr::knit_hooks$set(output = function(x, options){
-#   gsub("```\n*```r*\n*", "", x)
-# })
 
 ```
 
@@ -56,7 +25,6 @@ library(tidyverse)
 library(tidylog)
 library(pheatmap) # for making correlation heatmap
 library(RColorBrewer) # for heatmap colors
-# library(raster) # for calculating %CV
 library(kableExtra) # for formatting kables
 
 ```
@@ -140,7 +108,7 @@ pgRNA_counts_cdf <- ggplot(d.counts_cdf, aes(x = count_norm, color = sample)) +
   plot_theme +
   theme(aspect.ratio = wide_ar)
 pgRNA_counts_cdf
-# save_plot(pgRNA_counts_cdf)
+save_plot(pgRNA_counts_cdf)
 
 ```
 
@@ -165,7 +133,7 @@ sample_cpm_histogram <- ggplot(d.counts_cpm, aes(x = log2_cpm, fill = sample)) +
         legend.position = "none") +
   facet_wrap(~sample, scales = "free_y", ncol = ceiling(n_samples/2))
 sample_cpm_histogram
-# save_plot(sample_cpm_histogram)
+save_plot(sample_cpm_histogram)
 
 ```
 
@@ -204,13 +172,13 @@ sample_cor_heatmap_unfiltered <- pheatmap(d.counts_cpm_cor,
                  cluster_method = "complete")
 sample_cor_heatmap_unfiltered
 
-# png(file.path(out_dir, "plots", "png", "sample_correlation_heatmap_unfiltered.png"), 
-#     units = "in", res = 300, 
-#     width = 4.51, height = 4.51)
-# pdf(file.path(out_dir, "plots", "pdf", "sample_correlation_heatmap_unfiltered.pdf"), 
-#     width = 4.51, height = 4.51)
+png(file.path(out_dir, "plots", "png", "sample_correlation_heatmap_unfiltered.png"),
+    units = "in", res = 300,
+    width = 4.51, height = 4.51)
+pdf(file.path(out_dir, "plots", "pdf", "sample_correlation_heatmap_unfiltered.pdf"),
+    width = 4.51, height = 4.51)
 sample_cor_heatmap_unfiltered
-# dev.off()
+dev.off()
 
 ```
 
@@ -257,7 +225,7 @@ plasmid_cpm_histogram <-  ggplot(d.counts_cpm_plasmid, aes(x = log2_cpm)) +
   plot_theme +
   theme(aspect.ratio = wide_ar)
 plasmid_cpm_histogram
-# save_plot(plasmid_cpm_histogram)
+save_plot(plasmid_cpm_histogram)
 
 ## determine plasmid cutoff
 d.counts_cpm_plasmid_stats <- d.counts_cpm_plasmid %>%
@@ -283,7 +251,7 @@ plasmid_cpm_histogram_cutoff <- plasmid_cpm_histogram +
   geom_vline(xintercept = plasmid_cpm_cutoff, ## adjust based on selected cutoff
              linetype = "dashed") 
 plasmid_cpm_histogram_cutoff
-# save_plot(plasmid_cpm_histogram_cutoff)
+save_plot(plasmid_cpm_histogram_cutoff)
 
 ## add filter variable to pgRNA df based on selected cutoff
 d.counts_cpm_plasmid_filter <- d.counts_cpm_plasmid %>%
