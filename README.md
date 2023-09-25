@@ -7,6 +7,10 @@
 ## To Do
 
 ### Phoebe
+* add user input re: filtering counts, reps w/ low corr, reps w/ high SSMD, running MAGeCK or calculating LFC, GI score method to be used
+* add ifelse statement to confirm if RNAseq data is available - if it's not available, don't run those adjustments or include in the + control filter 
+* add optional rule to use MAGeCK to calculate LFCs - run based on config contents
+* re-write updated conda env yaml files
 * at what stage can I take the mean across reps? Alice says keep the reps in, but add the mean as another "rep" - decide what is best to do for this
 * stick with average lm method for now, add in binned median as well
 * name function arguments
@@ -18,6 +22,7 @@
   * https://rstudio.github.io/renv/articles/collaborating.html
 * remove really big DFs from memory once they are no longer needed
 * save RData somehow (but make sure I'm not saving big unnecessary datasets)
+  * save image from Snakemake runs so I can make sure I'm editing using the same versions of everything?
 * write fxn to convert Python/bash-formatted input to R file path input?
 * update counts QC Rmd to get library size dynamically
 * make it so that positive controls are also expressed?
@@ -32,7 +37,6 @@
 * consider using `rmarkdown::render("MyDocument.Rmd", params = "ask")` (see: https://bookdown.org/yihui/rmarkdown/params-knit.html) to get user input rather than relying solely on the config file
 * change sample/rep labels from days to "plasmid", "early", "late"? Or define what those are in the config file and then import that info as parameters to R scripts?
 * address cases w/ multiple early TP reps
-* convert rule 1 output from .html file to .txt file
 * change counter_efficient.R output to make variable names just be the sample name (not counts_sampleName)
 * should I filter out count = 0 before calculating CPM outliers??
 * try out formatR formatting and options: https://bookdown.org/yihui/rmarkdown-cookbook/opts-tidy.html
@@ -48,3 +52,4 @@
 * update id => pgRNA_id
 * pre-process annotations file to get a saveable/shareable one => update get_pgRNA_annotations.Rmd
 * get rid of "d." in saved variable names...except for RDS files?
+* convert rule 1 output from .html file to .txt file

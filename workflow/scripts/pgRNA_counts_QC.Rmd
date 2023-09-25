@@ -6,13 +6,13 @@ output: html_document
 params: 
   cell_line: "HeLa"
   base_dir: "/Volumes/Projects/paralog_pgRNA/pgPEN_library/GI_mapping"
+  plasmid_cutoff: "default"
 ---
 
 
 ## To Do
-* convert sample list to factor - make sure there is a consistent naming scheme in the barcode ref file, then use that somehow? Sort it alphabetically?
 * write a function to summarize n and percent of TRUE values, return n(TRUE)
-* allow user to input cutoff used to filter reads
+* plasmid_cutoff param: add in an option for if there is no plasmid cutoff applied
 
 
 ## Setup
@@ -110,16 +110,35 @@ d.counts_long <- d.counts %>%
                values_to = "count")
 
 ## how many reads are in each sample?
+lib_size <- nrow(d.counts)
+
 d.summ <- d.counts_long %>%
   group_by(sample) %>%
   summarize(sum = sum(count), 
-            coverage = round((sum / 31700), 2))
+            coverage = round((sum / lib_size), 2))
 print_kbl(d.summ)
 
 ## convert sample to a factor 
 ## NOTE: figure out a way to do this so it automatically sorts logically
+plasmid_samples <- d.counts_long %>%
+  distinct(sample) %>%
+  filter(str_detect(sample, "plasmid") | str_detect(sample, "Day00")) %>%
+  arrange(sample) %>%
+  pull()
+# plasmid_samples
+
+samples_sorted <- d.counts_long %>%
+  distinct(sample) %>%
+  filter(!str_detect(sample, "plasmid") | !str_detect(sample, "Day00")) %>%
+  arrange(sample) %>%
+  pull()
+
+sample_order <- c(plasmid_samples, samples_sorted)
+# sample_order
+
+## convert sample to a factor 
 d.counts_long <- d.counts_long %>%
-  mutate(sample = factor(sample)) 
+  mutate(sample = factor(sample, levels = sample_order))
 
 ```
 
@@ -259,19 +278,31 @@ plasmid_cpm_histogram <-  ggplot(d.counts_cpm_plasmid, aes(x = log2_cpm)) +
 plasmid_cpm_histogram
 # save_plot(plasmid_cpm_histogram)
 
-## determine plasmid cutoff
-d.counts_cpm_plasmid_stats <- d.counts_cpm_plasmid %>%
-  summarize(median = median(log2_cpm),
-            Q1 = quantile(log2_cpm, probs = 0.25),
-            Q3 = quantile(log2_cpm, probs = 0.75),
-            lower_outlier = (Q1 - 1.5*(Q3 - Q1)))
-print_kbl(d.counts_cpm_plasmid_stats)
+```
 
-## save your selected cutoff as a variable
-plasmid_cpm_cutoff <- d.counts_cpm_plasmid_stats %>%
-  pull(lower_outlier) %>%
-  unlist() %>%
-  unname()
+
+```{r}
+
+if(params$plasmid_cutoff == "default") {
+  ## determine plasmid cutoff based on 1.5*IQR
+  d.counts_cpm_plasmid_stats <- d.counts_cpm_plasmid %>%
+    summarize(median = median(log2_cpm),
+              Q1 = quantile(log2_cpm, probs = 0.25),
+              Q3 = quantile(log2_cpm, probs = 0.75),
+              lower_outlier = (Q1 - 1.5*(Q3 - Q1)))
+  print_kbl(d.counts_cpm_plasmid_stats)
+
+  ## save your selected cutoff as a variable
+  plasmid_cpm_cutoff <- d.counts_cpm_plasmid_stats %>%
+    pull(lower_outlier) %>%
+    unlist() %>%
+    unname()
+} else{
+  ## use user-supplied plasmid cutoff
+  plasmid_cpm_cutoff <- params$plasmid_cutoff %>%
+    unlist() %>%
+    unname()
+}
 
 ```
 

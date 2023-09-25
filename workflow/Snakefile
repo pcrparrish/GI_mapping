@@ -55,7 +55,6 @@ rule pgRNA_counts_QC:
     input:
         pgRNA_counts_dir + config["base_sample_name"] + "_{cell_line}_counts.txt"
     output:
-        ## convert to a report param, change output to TXT file?
         "results/pgRNA_counts_QC/tables/rds/d.{cell_line}_counts_cpm_flag_long",
         "results/pgRNA_counts_QC/" + config["base_sample_name"] + "_{cell_line}_counts_QC.html"
     conda:

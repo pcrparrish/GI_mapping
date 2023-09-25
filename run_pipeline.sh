@@ -16,3 +16,4 @@ snakemake --snakefile workflow/Snakefile \
 dot -Tpdf "workflow/report/dag.dot" > "workflow/report/pipeline_dag.pdf"
 
 rm "workflow/report/dag.dot"
+echo "Done!"

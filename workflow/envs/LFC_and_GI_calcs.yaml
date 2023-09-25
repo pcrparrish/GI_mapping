@@ -93,6 +93,7 @@ dependencies:
   - r-clipr=0.8.0=r41hc72bb7e_1
   - r-clisymbols=1.2.0=r41hc72bb7e_1004
   - r-colorspace=2.0_3=r41h06615bd_1
+  - r-corrr
   - r-cpp11=0.4.3=r41hc72bb7e_0
   - r-crayon=1.5.2=r41hc72bb7e_1
   - r-curl=4.3.3=r41h06615bd_1

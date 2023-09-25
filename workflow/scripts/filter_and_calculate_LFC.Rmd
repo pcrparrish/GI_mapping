@@ -6,6 +6,19 @@ output: html_document
 params: 
   cell_line: "HeLa"
   base_dir: "/Volumes/Projects/paralog_pgRNA/pgPEN_library/GI_mapping"
+  filter_counts: 
+    input: select
+    choices: ["yes", "no"]
+    value: "yes"
+  filter_ssmd:
+    input: select
+    choices: ["yes", "no"]
+    value: "no"
+  filter_cor:
+    input: select
+    choices: ["yes", "no"]
+    value: "no"
+  
 ---
 
 ## Rmd knit notes
@@ -14,15 +27,18 @@ https://stackoverflow.com/questions/31463143/pass-parameters-from-command-line-i
 
 
 ## To Do
+* allow user to input cutoff used to filter reads
 * add steps to filter out screens with SSMD < -0.5 or replicate correlation <0.7? 
-* use only expressed pan-essential genes as + controls? 
-* add "Rep" back into replicate labels
+* use only expressed pan-essential genes as + controls? - yes, if there is RNAseq data available
 * add in early vs. late LFC? adjust as well? 
 * clean up tibble earlier - get rid of extra unnecessary columns so it's more readable, drop old columns when necessary
 * get broad_target_type back in?
 * make plots that I want to do before & after adjusting functions? 
 * make target mean expression density plots for single- and double-targeting pgRNAs
 * flag if reps have SSMD > -0.5 & add in an option for user to re-run and remove them
+
+### Done:
+* add "Rep" back into replicate labels - done for plots only
 
 
 ## Setup
@@ -109,6 +125,17 @@ make_norm_ctrl_violin_plot <- function(df, y_var, y_lab){
     
   return(plot)
   
+}
+
+```
+
+```{r}
+
+label_facet <- function(original_var, custom_name){
+  lev <- levels(as.factor(original_var))
+  lab <- paste0(custom_name, " ", lev)
+  names(lab) <- lev
+  return(lab)  
 }
 
 ```
@@ -286,7 +313,7 @@ d.lfc_annot <- d.lfc_annot %>%
 unadjusted_norm_ctrl_violin_plot <- make_norm_ctrl_violin_plot(d.lfc_annot, "lfc_plasmid_vs_late", "raw_LFC")
 
 unadjusted_norm_ctrl_violin_plot +
-    facet_wrap(~rep)
+    facet_wrap(~rep, labeller = labeller(rep = label_facet(d.lfc_annot$rep, "Rep")))
 
 ```
 
@@ -476,7 +503,7 @@ d.lfc_annot_adj
 adjusted_norm_ctrl_violin_plot <- make_norm_ctrl_violin_plot(d.lfc_annot_adj, "lfc_adj2", "adjusted_LFC")
 
 adjusted_norm_ctrl_violin_plot +
-    facet_wrap(~rep)
+    facet_wrap(~rep, labeller = labeller(rep = label_facet(d.lfc_annot_adj$rep, "Rep")))
 
 ```
 
@@ -531,7 +558,7 @@ d.lfc_annot_adj_single %>%
   plot_options +
   plot_theme +
   theme(aspect.ratio = wide_ar) +
-  facet_wrap(~rep)
+  facet_wrap(~rep, labeller = labeller(rep = label_facet(d.lfc_annot_adj_single$rep, "Rep")))
 
 ```
 
@@ -584,7 +611,7 @@ ggplot(d.lfc_annot_adj_double_plot, aes(x = lfc_adj3, fill = n_genes_expressed))
   plot_options +
   plot_theme +
   theme(aspect.ratio = wide_ar) +
-  facet_wrap(~rep)
+  facet_wrap(~rep, labeller = labeller(rep = label_facet(d.lfc_annot_adj_double_plot$rep, "Rep")))
 
 ```
 
@@ -671,7 +698,7 @@ make_rep_cor_plot(d.adj_mean_lfc_rep_cor_plot, d.adj_mean_lfc_rep_cor_summary, "
 adjusted_norm_ctrl_violin_plot <- make_norm_ctrl_violin_plot(d.lfc_annot_adj_target, "target_mean_CS", "target_mean_adjusted_LFC")
 
 adjusted_norm_ctrl_violin_plot +
-    facet_wrap(~rep)
+    facet_wrap(~rep, labeller = labeller(rep = label_facet(d.lfc_annot_adj_target$rep, "Rep")))
 
 ```
 
